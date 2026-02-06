@@ -103,13 +103,10 @@ export async function startBot() {
       }
     }
 
-    // 2. Unlock Logic: .unlock command
-    if (message.content.trim() === ".unlock") {
+    // 2. Unlock Logic: .unlock or .ul command
+    const isUnlockCmd = message.content.trim() === ".unlock" || message.content.trim() === ".ul";
+    if (isUnlockCmd) {
       const lockInfo = activeLocks.get(message.channel.id);
-      
-      // Check if channel is actually locked/tracked by us
-      // If not tracked in memory, we might still want to try unlocking if it's the right channel?
-      // User said "The channel should be unlockable using a dot command"
       
       // Check permissions
       const member = message.member;
@@ -118,17 +115,16 @@ export async function startBot() {
       const isAdmin = config.adminRoleId ? member.roles.cache.has(config.adminRoleId) : member.permissions.has(PermissionsBitField.Flags.Administrator);
       const isHunter = lockInfo?.hunterId === member.id;
 
-      if (isAdmin || isHunter) {
+      // Allow everyone to unlock rare spawns (non-shiny hunt)
+      // If it's a shiny hunt, only hunter or admins
+      const canUnlock = !lockInfo?.isShinyHunt || isAdmin || isHunter;
+
+      if (canUnlock) {
         const channel = message.channel as TextChannel;
         const targetRole = message.guild?.roles.cache.get(config.targetRoleId);
         
         if (targetRole) {
           try {
-            // Restore permissions (reset or set to true?) 
-            // Usually we just want to remove the overwrite or set it to null (inherit)
-            // or set it to true if it was explicitly allowed before. 
-            // "restores the removed permissions" -> likely deleting the overwrite or setting SendMessages: null
-            
             await channel.permissionOverwrites.edit(targetRole, {
               SendMessages: null, // Reset to default/inherit
             });
@@ -156,11 +152,59 @@ export async function startBot() {
         }
       } else {
         // Deny unlock
-        if (lockInfo && lockInfo.isShinyHunt) {
-          await message.reply("🔒 This is a shiny hunt! Only the hunter or admins can unlock.");
-        } else {
-          await message.reply("🔒 Only admins can unlock this channel.");
-        }
+        await message.reply("🔒 This is a shiny hunt! Only the hunter or admins can unlock.");
+      }
+      return;
+    }
+
+    // 3. Admin Commands
+    const args = message.content.trim().split(/\s+/);
+    const cmd = args[0].toLowerCase();
+    const isAdmin = config.adminRoleId ? message.member?.roles.cache.has(config.adminRoleId) : message.member?.permissions.has(PermissionsBitField.Flags.Administrator);
+
+    if (!isAdmin) return;
+
+    if (cmd === ".lock") {
+      const channel = message.channel as TextChannel;
+      const targetRole = message.guild?.roles.cache.get(config.targetRoleId);
+      if (targetRole) {
+        await channel.permissionOverwrites.edit(targetRole, { SendMessages: false });
+        await message.channel.send("🔒 Channel locked manually by admin.");
+      }
+    } else if (cmd === ".purge") {
+      const amount = parseInt(args[1]);
+      if (isNaN(amount) || amount < 1 || amount > 100) return message.reply("Usage: .purge [1-100]");
+      const channel = message.channel as TextChannel;
+      await channel.bulkDelete(amount, true);
+      const msg = await message.channel.send(`🧹 Purged ${amount} messages.`);
+      setTimeout(() => msg.delete().catch(() => {}), 3000);
+    } else if (cmd === ".mute") {
+      const target = message.mentions.members?.first();
+      const time = parseInt(args[2]); // in minutes
+      if (!target || isNaN(time)) return message.reply("Usage: .mute @user [time_in_minutes]");
+      try {
+        await target.timeout(time * 60 * 1000, "Muted via command");
+        await message.channel.send(`🔇 Muted ${target.user.tag} for ${time} minutes.`);
+      } catch (e) {
+        await message.reply("Failed to mute user. Check roles.");
+      }
+    } else if (cmd === ".unmute") {
+      const target = message.mentions.members?.first();
+      if (!target) return message.reply("Usage: .unmute @user");
+      try {
+        await target.timeout(null);
+        await message.channel.send(`🔊 Unmuted ${target.user.tag}.`);
+      } catch (e) {
+        await message.reply("Failed to unmute user.");
+      }
+    } else if (cmd === ".ban") {
+      const target = message.mentions.members?.first();
+      if (!target) return message.reply("Usage: .ban @user");
+      try {
+        await target.ban({ reason: "Banned via command" });
+        await message.channel.send(`🔨 Banned ${target.user.tag}.`);
+      } catch (e) {
+        await message.reply("Failed to ban user.");
       }
     }
   });
