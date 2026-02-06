@@ -1,38 +1,50 @@
-import { type User, type InsertUser } from "@shared/schema";
-import { randomUUID } from "crypto";
-
-// modify the interface with any CRUD methods
-// you might need
+import { db } from "./db";
+import {
+  botConfigs,
+  logs,
+  type BotConfig,
+  type InsertBotConfig,
+  type Log,
+  type InsertLog,
+} from "@shared/schema";
+import { eq, desc } from "drizzle-orm";
 
 export interface IStorage {
-  getUser(id: string): Promise<User | undefined>;
-  getUserByUsername(username: string): Promise<User | undefined>;
-  createUser(user: InsertUser): Promise<User>;
+  getConfig(): Promise<BotConfig | undefined>;
+  updateConfig(config: InsertBotConfig): Promise<BotConfig>;
+  getLogs(limit?: number): Promise<Log[]>;
+  addLog(log: InsertLog): Promise<Log>;
 }
 
-export class MemStorage implements IStorage {
-  private users: Map<string, User>;
-
-  constructor() {
-    this.users = new Map();
+export class DatabaseStorage implements IStorage {
+  async getConfig(): Promise<BotConfig | undefined> {
+    const [config] = await db.select().from(botConfigs).limit(1);
+    return config;
   }
 
-  async getUser(id: string): Promise<User | undefined> {
-    return this.users.get(id);
+  async updateConfig(insertConfig: InsertBotConfig): Promise<BotConfig> {
+    const [existing] = await db.select().from(botConfigs).limit(1);
+    if (existing) {
+      const [updated] = await db
+        .update(botConfigs)
+        .set(insertConfig)
+        .where(eq(botConfigs.id, existing.id))
+        .returning();
+      return updated;
+    } else {
+      const [created] = await db.insert(botConfigs).values(insertConfig).returning();
+      return created;
+    }
   }
 
-  async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username === username,
-    );
+  async getLogs(limit = 50): Promise<Log[]> {
+    return await db.select().from(logs).orderBy(desc(logs.timestamp)).limit(limit);
   }
 
-  async createUser(insertUser: InsertUser): Promise<User> {
-    const id = randomUUID();
-    const user: User = { ...insertUser, id };
-    this.users.set(id, user);
-    return user;
+  async addLog(log: InsertLog): Promise<Log> {
+    const [created] = await db.insert(logs).values(log).returning();
+    return created;
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();
