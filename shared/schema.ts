@@ -4,17 +4,17 @@ import { z } from "zod";
 
 export const botConfigs = pgTable("bot_configs", {
   id: serial("id").primaryKey(),
-  guildId: text("guild_id").notNull(), // Limits bot to specific guilds or just stores settings per guild
-  targetRoleId: text("target_role_id").notNull(), // Role to lock (remove perms from)
-  detectionRoleId: text("detection_role_id").notNull(), // Role pinged by the P2A bot
-  adminRoleId: text("admin_role_id"), // Role allowed to override locks
-  spawnChannelId: text("spawn_channel_id"), // Optional: limit to specific channel
+  guildId: text("guild_id").notNull(),
+  targetUserId: text("target_user_id").notNull(), // Specific user to lock
+  detectionRoleId: text("detection_role_id").notNull(), // Rare role ID
+  sourceBotId: text("source_bot_id").notNull(), // ID of the bot to listen to (e.g. p2a ap)
+  adminRoleId: text("admin_role_id"),
   isSystemEnabled: boolean("is_system_enabled").default(true),
 });
 
 export const logs = pgTable("logs", {
   id: serial("id").primaryKey(),
-  type: text("type").notNull(), // 'LOCK', 'UNLOCK', 'INFO', 'ERROR'
+  type: text("type").notNull(),
   message: text("message").notNull(),
   channelName: text("channel_name"),
   timestamp: timestamp("timestamp").defaultNow(),
