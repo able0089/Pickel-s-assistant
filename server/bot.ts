@@ -17,7 +17,8 @@ interface ActiveLock {
 }
 
 const activeLocks = new Map<string, ActiveLock>();
-const ASSET_IMAGE_URL = "https://raw.githubusercontent.com/replit/agent-assets/main/pickel.png"; // Placeholder or direct URL if possible
+const ASSET_IMAGE_URL = "https://raw.githubusercontent.com/replit/agent-assets/main/pickel.png"; // Placeholder
+const LOCAL_IMAGE_URL = "/images/pickel.png"; 
 
 export async function startBot() {
   if (!process.env.DISCORD_TOKEN) return;
@@ -90,7 +91,8 @@ export async function startBot() {
         .setDescription(isShinyHunt 
           ? `Only <@${hunterId}> or Admins can unlock.` 
           : "Anyone can unlock this channel.")
-        .setImage(ASSET_IMAGE_URL)
+        .setImage(ASSET_IMAGE_URL) // Use the GitHub URL as it's more reliable for Discord
+        .setThumbnail("https://raw.githubusercontent.com/replit/agent-assets/main/pickel.png")
         .setColor(isShinyHunt ? 0xFFA500 : 0xFF0000);
 
       const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -111,12 +113,18 @@ export async function startBot() {
     if (!config) return;
 
     const lock = activeLocks.get(channel.id);
-    const isAdmin = config.adminRoleId ? source.member?.roles.cache.has(config.adminRoleId) : source.member?.permissions.has(PermissionsBitField.Flags.Administrator);
-    
+    const member = source.member;
+    const isAdmin = config.adminRoleId ? member?.roles.cache.has(config.adminRoleId) : member?.permissions.has(PermissionsBitField.Flags.Administrator);
+    const isHunter = lock?.hunterId === user.id;
+
     if (lock?.isShinyHunt) {
-      if (!isAdmin && user.id !== lock.hunterId) {
+      if (!isAdmin && !isHunter) {
         const msg = "❌ Only the pinged hunter can unlock this channel.";
-        return source.reply ? source.reply({ content: msg, ephemeral: true }) : channel.send(msg);
+        if (source.reply) {
+          return source.reply({ content: msg, ephemeral: true });
+        } else {
+          return channel.send(msg);
+        }
       }
     }
 
@@ -130,10 +138,19 @@ export async function startBot() {
       });
       activeLocks.delete(channel.id);
       const msg = "🔓 Channel Unlocked. Permissions restored.";
-      source.reply ? source.reply({ content: msg }) : channel.send(msg);
+      if (source.reply) {
+        if (source.deferred || source.replied) {
+          await source.followUp({ content: msg });
+        } else {
+          await source.reply({ content: msg });
+        }
+      } else {
+        await channel.send(msg);
+      }
       await storage.addLog({ type: "UNLOCK", message: `Unlocked by ${user.tag}`, channelName: channel.name });
     } catch (e) {
       console.error(e);
+      if (source.reply) source.reply({ content: "Failed to unlock. Check permissions.", ephemeral: true }).catch(() => {});
     }
   }
 

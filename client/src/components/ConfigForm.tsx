@@ -22,10 +22,10 @@ export function ConfigForm() {
     resolver: zodResolver(insertBotConfigSchema),
     defaultValues: {
       guildId: "",
-      targetRoleId: "",
+      targetUserId: "",
       detectionRoleId: "",
+      sourceBotId: "",
       adminRoleId: "",
-      spawnChannelId: "",
       isSystemEnabled: true,
     },
   });
@@ -34,10 +34,10 @@ export function ConfigForm() {
     if (defaultConfig) {
       form.reset({
         guildId: defaultConfig.guildId,
-        targetRoleId: defaultConfig.targetRoleId,
+        targetUserId: defaultConfig.targetUserId,
         detectionRoleId: defaultConfig.detectionRoleId,
+        sourceBotId: defaultConfig.sourceBotId,
         adminRoleId: defaultConfig.adminRoleId || "",
-        spawnChannelId: defaultConfig.spawnChannelId || "",
         isSystemEnabled: defaultConfig.isSystemEnabled ?? true,
       });
     }
@@ -86,7 +86,7 @@ export function ConfigForm() {
           </div>
           <div>
             <CardTitle>Configuration</CardTitle>
-            <CardDescription>Manage role IDs and bot behavior settings.</CardDescription>
+            <CardDescription>Manage IDs and bot behavior settings.</CardDescription>
           </div>
         </div>
       </CardHeader>
@@ -110,14 +110,14 @@ export function ConfigForm() {
 
               <FormField
                 control={form.control}
-                name="targetRoleId"
+                name="targetUserId"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Target Role ID (To Lock)</FormLabel>
+                    <FormLabel>Target User ID (To Lock)</FormLabel>
                     <FormControl>
-                      <Input placeholder="Role ID to restrict..." {...field} className="bg-background/50 border-white/10 focus:border-primary/50 transition-colors font-mono" />
+                      <Input placeholder="User ID to restrict..." {...field} className="bg-background/50 border-white/10 focus:border-primary/50 transition-colors font-mono" />
                     </FormControl>
-                    <FormDescription>The role that will lose permissions.</FormDescription>
+                    <FormDescription>The specific user that will lose permissions.</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -128,11 +128,26 @@ export function ConfigForm() {
                 name="detectionRoleId"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Detection Role ID (Pinged)</FormLabel>
+                    <FormLabel>Detection Role ID (Rare Role)</FormLabel>
                     <FormControl>
                       <Input placeholder="Role ID to watch..." {...field} className="bg-background/50 border-white/10 focus:border-primary/50 transition-colors font-mono" />
                     </FormControl>
                     <FormDescription>Bot listens for pings to this role.</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="sourceBotId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Source Bot ID (P2A Bot)</FormLabel>
+                    <FormControl>
+                      <Input placeholder="ID of the bot to listen to..." {...field} className="bg-background/50 border-white/10 focus:border-primary/50 transition-colors font-mono" />
+                    </FormControl>
+                    <FormDescription>Only messages from this bot will trigger locks.</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -148,20 +163,6 @@ export function ConfigForm() {
                       <Input placeholder="Admin role ID..." {...field} value={field.value || ""} className="bg-background/50 border-white/10 focus:border-primary/50 transition-colors font-mono" />
                     </FormControl>
                     <FormDescription>Users who can bypass locks.</FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="spawnChannelId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Spawn Channel ID (Optional)</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Specific channel ID..." {...field} value={field.value || ""} className="bg-background/50 border-white/10 focus:border-primary/50 transition-colors font-mono" />
-                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
