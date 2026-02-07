@@ -50,8 +50,9 @@ export async function registerRoutes(
   if (!existingConfig) {
     await storage.updateConfig({
       guildId: "REPLACE_WITH_GUILD_ID",
-      targetRoleId: "REPLACE_WITH_TARGET_ROLE_ID",
+      targetUserId: "REPLACE_WITH_TARGET_USER_ID",
       detectionRoleId: "REPLACE_WITH_DETECTION_ROLE_ID",
+      sourceBotId: "REPLACE_WITH_BOT_ID",
       isSystemEnabled: true,
     });
     console.log("Seeded default bot configuration");
