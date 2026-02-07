@@ -17,8 +17,7 @@ interface ActiveLock {
 }
 
 const activeLocks = new Map<string, ActiveLock>();
-const ASSET_IMAGE_URL = "https://raw.githubusercontent.com/replit/agent-assets/main/pickel.png"; // Placeholder
-const LOCAL_IMAGE_URL = "/images/pickel.png"; 
+const ASSET_IMAGE_URL = "https://raw.githubusercontent.com/replit/agent-assets/main/pickel.png";
 
 export async function startBot() {
   if (!process.env.DISCORD_TOKEN) return;
@@ -40,7 +39,7 @@ export async function startBot() {
     const config = await storage.getConfig();
     if (!config || !config.isSystemEnabled) return;
 
-    // Admin commands
+    // Command handling
     if (message.content.startsWith(".")) {
       const args = message.content.slice(1).trim().split(/\s+/);
       const cmd = args[0].toLowerCase();
@@ -62,27 +61,40 @@ export async function startBot() {
       }
     }
 
-    // Only react to specific bot
+    // Spawn Detection
     if (message.author.id !== config.sourceBotId) return;
 
-    const hasRarePing = message.mentions.roles.has(config.detectionRoleId);
     const isShinyHunt = message.content.includes("Shiny hunt pings:");
+    const hasRarePing = message.mentions.roles.has(config.detectionRoleId);
 
     if (isShinyHunt || hasRarePing) {
-      // Shiny takes priority for logic, but lock is the same
-      await applyLock(message.channel as TextChannel, config.targetUserId, isShinyHunt, message.mentions.users.first()?.id);
+      let hunterId: string | undefined;
+      
+      if (isShinyHunt) {
+        // Specifically extract hunter from "Shiny hunt pings:" line to avoid confusion with collection pings
+        const lines = message.content.split("\n");
+        const shinyLine = lines.find(l => l.includes("Shiny hunt pings:"));
+        if (shinyLine) {
+          const match = shinyLine.match(/<@!?(\d+)>/);
+          if (match) hunterId = match[1];
+        }
+      }
+
+      // Prioritize shiny hunt logic if both present
+      await applyLock(message.channel as TextChannel, config.targetUserId, isShinyHunt, hunterId);
     }
   });
 
   async function applyLock(channel: TextChannel, targetUserId: string, isShinyHunt: boolean, hunterId?: string) {
     try {
+      // Use member type override to ensure permissions are effectively applied to the specific user
       await channel.permissionOverwrites.edit(targetUserId, {
         ViewChannel: false,
         SendMessages: false,
         AddReactions: false,
         UseExternalEmojis: false,
         ReadMessageHistory: false,
-      });
+      }, { reason: "Bot Lock", type: 1 });
 
       activeLocks.set(channel.id, { hunterId, channelId: channel.id, lockedAt: new Date(), isShinyHunt });
 
@@ -91,8 +103,8 @@ export async function startBot() {
         .setDescription(isShinyHunt 
           ? `Only <@${hunterId}> or Admins can unlock.` 
           : "Anyone can unlock this channel.")
-        .setImage(ASSET_IMAGE_URL) // Use the GitHub URL as it's more reliable for Discord
-        .setThumbnail("https://raw.githubusercontent.com/replit/agent-assets/main/pickel.png")
+        .setImage(ASSET_IMAGE_URL)
+        .setThumbnail(ASSET_IMAGE_URL)
         .setColor(isShinyHunt ? 0xFFA500 : 0xFF0000);
 
       const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -100,9 +112,9 @@ export async function startBot() {
       );
 
       await channel.send({ embeds: [embed], components: [row] });
-      await storage.addLog({ type: "LOCK", message: `Locked for ${isShinyHunt ? 'Shiny' : 'Rare'}.`, channelName: channel.name });
+      await storage.addLog({ type: "LOCK", message: `Locked for ${isShinyHunt ? 'Shiny' : 'Rare'}. Hunter: ${hunterId || 'None'}`, channelName: channel.name });
     } catch (e) {
-      console.error(e);
+      console.error("Lock failed:", e);
     }
   }
 
@@ -137,6 +149,7 @@ export async function startBot() {
         ReadMessageHistory: null,
       });
       activeLocks.delete(channel.id);
+      
       const msg = "🔓 Channel Unlocked. Permissions restored.";
       if (source.reply) {
         if (source.deferred || source.replied) {
@@ -147,9 +160,10 @@ export async function startBot() {
       } else {
         await channel.send(msg);
       }
+
       await storage.addLog({ type: "UNLOCK", message: `Unlocked by ${user.tag}`, channelName: channel.name });
     } catch (e) {
-      console.error(e);
+      console.error("Unlock failed:", e);
       if (source.reply) source.reply({ content: "Failed to unlock. Check permissions.", ephemeral: true }).catch(() => {});
     }
   }
