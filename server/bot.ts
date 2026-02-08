@@ -237,3 +237,14 @@ export async function startBot() {
 
   client.login(process.env.DISCORD_TOKEN).catch(console.error);
 }
+async function main() {
+  if (!process.env.DISCORD_TOKEN) {
+    console.error("❌ DISCORD_TOKEN is not set");
+    process.exit(1);
+  }
+
+  await client.login(process.env.DISCORD_TOKEN);
+  await startBot();
+}
+
+main().catch(console.error);
