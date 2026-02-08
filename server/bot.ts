@@ -26,7 +26,8 @@ export async function startBot() {
   // Auto-unlock and Reminder Timers
   setInterval(async () => {
     const now = new Date();
-    for (const [channelId, lock] of activeLocks.entries()) {
+    const locks = Array.from(activeLocks.entries());
+    for (const [channelId, lock] of locks) {
       const diffMs = now.getTime() - lock.lockedAt.getTime();
       const diffHrs = diffMs / (1000 * 60 * 60);
 
