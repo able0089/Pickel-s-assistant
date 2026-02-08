@@ -10,6 +10,12 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Loader2, Save, Settings2 } from "lucide-react";
 import { useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
+import { z } from "zod";
+
+const formSchema = insertBotConfigSchema.extend({
+  regionalRoleId: z.string().optional(),
+  adminRoleId: z.string().optional(),
+});
 
 export function ConfigForm() {
   const { data: configs, isLoading } = useBotConfig();
@@ -19,11 +25,12 @@ export function ConfigForm() {
   const defaultConfig = configs?.[0];
 
   const form = useForm<InsertBotConfig>({
-    resolver: zodResolver(insertBotConfigSchema),
+    resolver: zodResolver(formSchema),
     defaultValues: {
       guildId: "",
       targetUserId: "",
       detectionRoleId: "",
+      regionalRoleId: "",
       sourceBotId: "",
       adminRoleId: "",
       isSystemEnabled: true,
@@ -36,6 +43,7 @@ export function ConfigForm() {
         guildId: defaultConfig.guildId,
         targetUserId: defaultConfig.targetUserId,
         detectionRoleId: defaultConfig.detectionRoleId,
+        regionalRoleId: defaultConfig.regionalRoleId || "",
         sourceBotId: defaultConfig.sourceBotId,
         adminRoleId: defaultConfig.adminRoleId || "",
         isSystemEnabled: defaultConfig.isSystemEnabled ?? true,
@@ -128,11 +136,24 @@ export function ConfigForm() {
                 name="detectionRoleId"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Detection Role ID (Rare Role)</FormLabel>
+                    <FormLabel>Rare Role ID</FormLabel>
                     <FormControl>
-                      <Input placeholder="Role ID to watch..." {...field} className="bg-background/50 border-white/10 focus:border-primary/50 transition-colors font-mono" />
+                      <Input placeholder="Role ID for Rare pings..." {...field} className="bg-background/50 border-white/10 focus:border-primary/50 transition-colors font-mono" />
                     </FormControl>
-                    <FormDescription>Bot listens for pings to this role.</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="regionalRoleId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Regional Role ID (Optional)</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Role ID for Regional pings..." {...field} value={field.value || ""} className="bg-background/50 border-white/10 focus:border-primary/50 transition-colors font-mono" />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}

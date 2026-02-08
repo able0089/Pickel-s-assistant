@@ -52,8 +52,8 @@ export async function startBot() {
 
       if (isAdmin) {
         if (cmd === "lock") {
-          await applyLock(message.channel as TextChannel, config.targetUserId, false);
-          await message.reply("🔒 Locked.");
+          await applyLock(message.channel as TextChannel, config.targetUserId, 'mod');
+          return;
         } else if (cmd === "purge") {
           const num = parseInt(args[1]);
           if (!isNaN(num)) await (message.channel as TextChannel).bulkDelete(Math.min(num, 100));
@@ -65,29 +65,31 @@ export async function startBot() {
     if (message.author.id !== config.sourceBotId) return;
 
     const isShinyHunt = message.content.includes("Shiny hunt pings:");
-    const hasRarePing = message.mentions.roles.has(config.detectionRoleId);
+    const isRareSpawn = message.mentions.roles.has(config.detectionRoleId);
+    const isRegionalSpawn = config.regionalRoleId ? message.mentions.roles.has(config.regionalRoleId) : false;
 
-    if (isShinyHunt || hasRarePing) {
+    if (isShinyHunt || isRareSpawn || isRegionalSpawn) {
       let hunterId: string | undefined;
-      
+      let lockType: 'shiny' | 'rare' | 'regional' = 'rare';
+
       if (isShinyHunt) {
-        // Specifically extract hunter from "Shiny hunt pings:" line to avoid confusion with collection pings
+        lockType = 'shiny';
         const lines = message.content.split("\n");
         const shinyLine = lines.find(l => l.includes("Shiny hunt pings:"));
         if (shinyLine) {
           const match = shinyLine.match(/<@!?(\d+)>/);
           if (match) hunterId = match[1];
         }
+      } else if (isRegionalSpawn) {
+        lockType = 'regional';
       }
 
-      // Prioritize shiny hunt logic if both present
-      await applyLock(message.channel as TextChannel, config.targetUserId, isShinyHunt, hunterId);
+      await applyLock(message.channel as TextChannel, config.targetUserId, lockType, hunterId);
     }
   });
 
-  async function applyLock(channel: TextChannel, targetUserId: string, isShinyHunt: boolean, hunterId?: string) {
+  async function applyLock(channel: TextChannel, targetUserId: string, type: 'shiny' | 'rare' | 'regional' | 'mod', hunterId?: string) {
     try {
-      // Use member type override to ensure permissions are effectively applied to the specific user
       await channel.permissionOverwrites.edit(targetUserId, {
         ViewChannel: false,
         SendMessages: false,
@@ -96,23 +98,42 @@ export async function startBot() {
         ReadMessageHistory: false,
       }, { reason: "Bot Lock", type: 1 });
 
-      activeLocks.set(channel.id, { hunterId, channelId: channel.id, lockedAt: new Date(), isShinyHunt });
+      const isShiny = type === 'shiny';
+      activeLocks.set(channel.id, { hunterId, channelId: channel.id, lockedAt: new Date(), isShinyHunt: isShiny });
+
+      let title = "🔒 Channel Locked";
+      let description = "This channel has been locked.";
+      let color = 0xFF0000;
+
+      if (type === 'shiny') {
+        title = "✨ Shiny Hunt Locked";
+        description = `Only <@${hunterId}> or Admins can unlock.\n\n**How to unlock:**\nClick the button below or use \`.ul\``;
+        color = 0xFFA500;
+      } else if (type === 'rare') {
+        title = "🔒 Rare Spawn Locked";
+        description = "Anyone can unlock this channel.\n\n**How to unlock:**\nClick the button below or use \`.ul\`";
+      } else if (type === 'regional') {
+        title = "🌏 Regional Spawn Locked";
+        description = "Anyone can unlock this channel.\n\n**How to unlock:**\nClick the button below or use \`.ul\`";
+      } else if (type === 'mod') {
+        title = "👮 Moderation Lock";
+        description = "This channel was locked by a moderator.";
+      }
 
       const embed = new EmbedBuilder()
-        .setTitle(isShinyHunt ? "✨ Shiny Hunt: Channel is locked" : "🔒 Rare Spawn: Channel is locked")
-        .setDescription(isShinyHunt 
-          ? `Only <@${hunterId}> or Admins can unlock.` 
-          : "Anyone can unlock this channel.")
-        .setImage(ASSET_IMAGE_URL)
+        .setTitle(title)
+        .setDescription(description)
+        .setImage(ASSET_IMAGE_URL + "?t=" + Date.now())
         .setThumbnail(ASSET_IMAGE_URL)
-        .setColor(isShinyHunt ? 0xFFA500 : 0xFF0000);
+        .setColor(color)
+        .setFooter({ text: "ShinyHunt Manager • Pickel", iconURL: ASSET_IMAGE_URL });
 
       const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-        new ButtonBuilder().setCustomId("unlock_button").setLabel("Locked").setStyle(ButtonStyle.Danger)
+        new ButtonBuilder().setCustomId("unlock_button").setLabel("Unlock Channel").setStyle(ButtonStyle.Success)
       );
 
       await channel.send({ embeds: [embed], components: [row] });
-      await storage.addLog({ type: "LOCK", message: `Locked for ${isShinyHunt ? 'Shiny' : 'Rare'}. Hunter: ${hunterId || 'None'}`, channelName: channel.name });
+      await storage.addLog({ type: "LOCK", message: `Locked for ${type}. Hunter: ${hunterId || 'None'}`, channelName: channel.name });
     } catch (e) {
       console.error("Lock failed:", e);
     }
@@ -142,12 +163,12 @@ export async function startBot() {
 
     try {
       await channel.permissionOverwrites.edit(config.targetUserId, {
-        ViewChannel: null,
-        SendMessages: null,
-        AddReactions: null,
-        UseExternalEmojis: null,
-        ReadMessageHistory: null,
-      });
+        ViewChannel: true,
+        SendMessages: true,
+        AddReactions: true,
+        UseExternalEmojis: true,
+        ReadMessageHistory: true,
+      }, { reason: "Bot Unlock", type: 1 });
       activeLocks.delete(channel.id);
       
       const msg = "🔓 Channel Unlocked. Permissions restored.";

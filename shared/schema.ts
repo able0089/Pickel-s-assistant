@@ -7,6 +7,7 @@ export const botConfigs = pgTable("bot_configs", {
   guildId: text("guild_id").notNull(),
   targetUserId: text("target_user_id").notNull(), // Specific user to lock
   detectionRoleId: text("detection_role_id").notNull(), // Rare role ID
+  regionalRoleId: text("regional_role_id"), // Regional role ID
   sourceBotId: text("source_bot_id").notNull(), // ID of the bot to listen to (e.g. p2a ap)
   adminRoleId: text("admin_role_id"),
   isSystemEnabled: boolean("is_system_enabled").default(true),
