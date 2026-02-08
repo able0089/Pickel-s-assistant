@@ -14,6 +14,7 @@ interface ActiveLock {
   channelId: string;
   lockedAt: Date;
   isShinyHunt: boolean;
+  reminderSent?: boolean;
 }
 
 const activeLocks = new Map<string, ActiveLock>();
@@ -21,6 +22,50 @@ const ASSET_IMAGE_URL = "https://raw.githubusercontent.com/replit/agent-assets/m
 
 export async function startBot() {
   if (!process.env.DISCORD_TOKEN) return;
+
+  // Auto-unlock and Reminder Timers
+  setInterval(async () => {
+    const now = new Date();
+    for (const [channelId, lock] of activeLocks.entries()) {
+      const diffMs = now.getTime() - lock.lockedAt.getTime();
+      const diffHrs = diffMs / (1000 * 60 * 60);
+
+      const channel = client.channels.cache.get(channelId) as TextChannel;
+      if (!channel) {
+        activeLocks.delete(channelId);
+        continue;
+      }
+
+      // 6 Hour Shiny Reminder
+      if (lock.isShinyHunt && diffHrs >= 6 && !lock.reminderSent) {
+        lock.reminderSent = true;
+        if (lock.hunterId) {
+          await channel.send(`✨ **Reminder ping:** <@${lock.hunterId}>, this channel is still locked for your shiny hunt!`).catch(console.error);
+        }
+      }
+
+      // 12 Hour Auto-Unlock
+      if (diffHrs >= 12) {
+        try {
+          const config = await storage.getConfig();
+          if (config) {
+            await channel.permissionOverwrites.edit(config.targetUserId, {
+              ViewChannel: true,
+              SendMessages: true,
+              AddReactions: true,
+              UseExternalEmojis: true,
+              ReadMessageHistory: true,
+            }, { reason: "Auto-unlock after 12h", type: 1 });
+            activeLocks.delete(channelId);
+            await channel.send("🔓 **Auto-unlock:** This channel has been automatically unlocked after 12 hours.").catch(console.error);
+            await storage.addLog({ type: "UNLOCK", message: "Auto-unlocked after 12h", channelName: channel.name });
+          }
+        } catch (e) {
+          console.error("Auto-unlock failed:", e);
+        }
+      }
+    }
+  }, 1000 * 60 * 5); // Check every 5 minutes
 
   client.on("ready", () => {
     storage.addLog({ type: "INFO", message: `Bot online as ${client.user?.tag}`, channelName: "System" });
