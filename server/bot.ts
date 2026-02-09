@@ -116,8 +116,9 @@ export async function startBot() {
 
     if (isShinyHunt || isRareSpawn || isRegionalSpawn) {
       let hunterId: string | undefined;
-      let lockType: 'shiny' | 'rare' | 'regional' = 'rare';
+      let lockType: 'shiny' | 'rare' | 'regional';
 
+      // Prioritize shiny hunt, then regional, then rare to prevent double embeds
       if (isShinyHunt) {
         lockType = 'shiny';
         const lines = message.content.split("\n");
@@ -128,6 +129,8 @@ export async function startBot() {
         }
       } else if (isRegionalSpawn) {
         lockType = 'regional';
+      } else {
+        lockType = 'rare';
       }
 
       await applyLock(message.channel as TextChannel, config.targetUserId, lockType, hunterId);
