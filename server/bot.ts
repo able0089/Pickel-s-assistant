@@ -145,6 +145,8 @@ export async function startBot() {
         AddReactions: false,
         UseExternalEmojis: false,
         ReadMessageHistory: false,
+        EmbedLinks: false,
+        AttachFiles: false,
       }, { reason: "Bot Lock", type: 1 });
 
       const isShiny = type === 'shiny';
@@ -217,6 +219,8 @@ export async function startBot() {
         AddReactions: true,
         UseExternalEmojis: true,
         ReadMessageHistory: true,
+        EmbedLinks: true,
+        AttachFiles: true,
       }, { reason: "Bot Unlock", type: 1 });
       activeLocks.delete(channel.id);
       
