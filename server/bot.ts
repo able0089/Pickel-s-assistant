@@ -18,7 +18,9 @@ interface ActiveLock {
 }
 
 const activeLocks = new Map<string, ActiveLock>();
+const afkUsers = new Map<string, { reason: string, timestamp: Date }>();
 const ASSET_IMAGE_URL = "https://raw.githubusercontent.com/replit/agent-assets/main/pickel.png";
+const OWNER_ID = "1396815034247806999";
 
 function parseTime(str: string): number | null {
   const match = str.match(/^(\d+)([smhd])$/);
@@ -93,7 +95,21 @@ export async function startBot() {
   });
 
   client.on("messageCreate", async (message) => {
-    if (message.author.bot && message.author.id === client.user?.id) return;
+    if (message.author.bot) return;
+
+    // AFK Check - remove AFK status if user speaks
+    if (afkUsers.has(message.author.id)) {
+      afkUsers.delete(message.author.id);
+      message.reply("Welcome back! I've removed your AFK status.").then(m => setTimeout(() => m.delete().catch(() => {}), 5000));
+    }
+
+    // AFK Ping check
+    message.mentions.users.forEach(user => {
+      const afkData = afkUsers.get(user.id);
+      if (afkData) {
+        message.reply(`**${user.username}** is currently AFK: ${afkData.reason} (since <t:${Math.floor(afkData.timestamp.getTime() / 1000)}:R>)`);
+      }
+    });
 
     const config = await storage.getConfig();
     if (!config || !config.isSystemEnabled) return;
@@ -106,6 +122,42 @@ export async function startBot() {
       if (cmd === "unlock" || cmd === "ul") {
         await handleUnlock(message);
         return;
+      }
+
+      if (cmd === "help") {
+        const helpEmbed = new EmbedBuilder()
+          .setAuthor({ name: "ShinyHunt Manager Help", iconURL: ASSET_IMAGE_URL })
+          .setTitle("🤖 Bot Commands & Information")
+          .setDescription(`Welcome! I am managed by <@${OWNER_ID}>.\nHere are the commands you can use:`)
+          .addFields(
+            { name: "🛠️ Management", value: "`.ul` / `.unlock` - Unlock current channel\n`.lock` - Moderation lock\n`.purge <n>` - Delete messages (Admin)" },
+            { name: "⏰ Utilities", value: "`.remind <time> <reason>` - Set a reminder (e.g. .remind 10m pickel)\n`.afk [reason]` - Set AFK status\n`.ping` - Check bot latency\n`.avatar [@user]` - Show user's avatar" },
+            { name: "✨ Automation", value: "I automatically lock channels for **Rare**, **Regional**, and **Shiny** spawns detected from configured bots." }
+          )
+          .setThumbnail(ASSET_IMAGE_URL)
+          .setColor(0x5865F2)
+          .setFooter({ text: "Pickel • Your Spawn Companion", iconURL: ASSET_IMAGE_URL });
+        
+        return message.reply({ embeds: [helpEmbed] });
+      }
+
+      if (cmd === "afk") {
+        const reason = args.slice(1).join(" ") || "AFK";
+        afkUsers.set(message.author.id, { reason, timestamp: new Date() });
+        return message.reply(`✅ I've set your AFK: **${reason}**`);
+      }
+
+      if (cmd === "ping") {
+        return message.reply(`🏓 Pong! Latency: **${client.ws.ping}ms**`);
+      }
+
+      if (cmd === "avatar") {
+        const target = message.mentions.users.first() || message.author;
+        const avatarEmbed = new EmbedBuilder()
+          .setTitle(`${target.username}'s Avatar`)
+          .setImage(target.displayAvatarURL({ size: 1024 }))
+          .setColor(0x5865F2);
+        return message.reply({ embeds: [avatarEmbed] });
       }
 
       if (cmd === "remind") {
