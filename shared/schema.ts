@@ -21,10 +21,34 @@ export const logs = pgTable("logs", {
   timestamp: timestamp("timestamp").defaultNow(),
 });
 
+export const warnings = pgTable("warnings", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  guildId: text("guild_id").notNull(),
+  reason: text("reason").notNull(),
+  warnedBy: text("warned_by").notNull(),
+  timestamp: timestamp("timestamp").defaultNow(),
+});
+
+export const reports = pgTable("reports", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  guildId: text("guild_id").notNull(),
+  reason: text("reason").notNull(),
+  reportedBy: text("reported_by").notNull(),
+  timestamp: timestamp("timestamp").defaultNow(),
+});
+
 export const insertBotConfigSchema = createInsertSchema(botConfigs).omit({ id: true });
 export const insertLogSchema = createInsertSchema(logs).omit({ id: true, timestamp: true });
+export const insertWarningSchema = createInsertSchema(warnings).omit({ id: true, timestamp: true });
+export const insertReportSchema = createInsertSchema(reports).omit({ id: true, timestamp: true });
 
 export type BotConfig = typeof botConfigs.$inferSelect;
 export type InsertBotConfig = z.infer<typeof insertBotConfigSchema>;
 export type Log = typeof logs.$inferSelect;
 export type InsertLog = z.infer<typeof insertLogSchema>;
+export type Warning = typeof warnings.$inferSelect;
+export type InsertWarning = z.infer<typeof insertWarningSchema>;
+export type Report = typeof reports.$inferSelect;
+export type InsertReport = z.infer<typeof insertReportSchema>;

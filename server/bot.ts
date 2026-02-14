@@ -97,13 +97,11 @@ export async function startBot() {
   client.on("messageCreate", async (message) => {
     if (message.author.bot) return;
 
-    // AFK Check - remove AFK status if user speaks
     if (afkUsers.has(message.author.id)) {
       afkUsers.delete(message.author.id);
       message.reply("Welcome back! I've removed your AFK status.").then(m => setTimeout(() => m.delete().catch(() => {}), 5000));
     }
 
-    // AFK Ping check
     message.mentions.users.forEach(user => {
       const afkData = afkUsers.get(user.id);
       if (afkData) {
@@ -130,9 +128,10 @@ export async function startBot() {
           .setTitle("🤖 Bot Commands & Information")
           .setDescription(`Welcome! I am managed by <@${OWNER_ID}>.\nHere are the commands you can use:`)
           .addFields(
-            { name: "🛠️ Management", value: "`.ul` / `.unlock` - Unlock current channel\n`.lock` - Moderation lock\n`.purge <n>` - Delete messages (Admin)" },
-            { name: "⏰ Utilities", value: "`.remind <time> <reason>` - Set a reminder (e.g. .remind 10m pickel)\n`.afk [reason]` - Set AFK status\n`.ping` - Check bot latency\n`.avatar [@user]` - Show user's avatar" },
-            { name: "✨ Automation", value: "I automatically lock channels for **Rare**, **Regional**, and **Shiny** spawns detected from configured bots." }
+            { name: "🛠️ Management", value: "`.ul` / `.unlock` - Unlock channel\n`.lock` - Mod lock\n`.purge <n>` - Delete messages" },
+            { name: "🛡️ Moderation", value: "`.warn <@user> [reason]` - Warn user (2=mute, 5=ban)\n`.ban <@user> [reason]` - Ban user\n`.reports` - View reports" },
+            { name: "⏰ Utilities", value: "`.remind <time> <reason>` - Set reminder\n`.afk [reason]` - Set AFK status\n`.report <@user> <reason>` - Report user\n`.ping` - Latency\n`.avatar [@user]` - Show avatar" },
+            { name: "✨ Automation", value: "I automatically lock channels for **Rare**, **Regional**, and **Shiny** spawns." }
           )
           .setThumbnail(ASSET_IMAGE_URL)
           .setColor(0x5865F2)
@@ -145,6 +144,20 @@ export async function startBot() {
         const reason = args.slice(1).join(" ") || "AFK";
         afkUsers.set(message.author.id, { reason, timestamp: new Date() });
         return message.reply(`✅ I've set your AFK: **${reason}**`);
+      }
+
+      if (cmd === "report") {
+        const targetUser = message.mentions.users.first();
+        const reason = args.slice(2).join(" ");
+        if (!targetUser || !reason) return message.reply("Usage: .report <@user> <reason>");
+        
+        await storage.addReport({
+          userId: targetUser.id,
+          guildId: message.guildId!,
+          reason: reason,
+          reportedBy: message.author.id,
+        });
+        return message.reply("✅ Report submitted to admins.");
       }
 
       if (cmd === "ping") {
@@ -163,10 +176,10 @@ export async function startBot() {
       if (cmd === "remind") {
         const timeStr = args[1];
         const reason = args.slice(2).join(" ") || "No reason provided";
-        if (!timeStr) return message.reply("Usage: .remind <time> [reason] (e.g. .remind 10m pickel)");
+        if (!timeStr) return message.reply("Usage: .remind <time> [reason]");
         
         const ms = parseTime(timeStr);
-        if (!ms) return message.reply("Invalid time format! Use s, m, h, or d (e.g. 10m).");
+        if (!ms) return message.reply("Invalid time format!");
 
         await message.reply(`✅ I'll remind you in **${timeStr}** for: *${reason}*`);
         
@@ -177,6 +190,64 @@ export async function startBot() {
       }
 
       if (isAdmin) {
+        if (cmd === "warn") {
+          const targetUser = message.mentions.users.first();
+          const reason = args.slice(2).join(" ") || "No reason provided";
+          if (!targetUser) return message.reply("Usage: .warn <@user> [reason]");
+          
+          await storage.addWarning({
+            userId: targetUser.id,
+            guildId: message.guildId!,
+            reason: reason,
+            warnedBy: message.author.id,
+          });
+          
+          const userWarnings = await storage.getUserWarnings(targetUser.id, message.guildId!);
+          const warnCount = userWarnings.length;
+          
+          let actionTaken = "";
+          if (warnCount === 2) {
+            const member = await message.guild?.members.fetch(targetUser.id);
+            if (member) {
+              await member.timeout(3600000, "Reached 2 warnings");
+              actionTaken = " (Muted for 1 hour)";
+            }
+          } else if (warnCount >= 5) {
+            const member = await message.guild?.members.fetch(targetUser.id);
+            if (member) {
+              await member.ban({ reason: "Reached 5 warnings" });
+              actionTaken = " (Banned)";
+            }
+          }
+          
+          return message.reply(`⚠️ **${targetUser.username}** has been warned. Total warnings: **${warnCount}**${actionTaken}`);
+        }
+
+        if (cmd === "reports") {
+          const reports = await storage.getReports(message.guildId!);
+          if (reports.length === 0) return message.reply("No reports found.");
+          
+          const reportList = reports.slice(0, 10).map(r => `• <@${r.reportedBy}> reported <@${r.userId}>: ${r.reason}`).join("\n");
+          const reportEmbed = new EmbedBuilder()
+            .setTitle("📋 Recent Reports")
+            .setDescription(reportList)
+            .setColor(0xFFFF00);
+          return message.reply({ embeds: [reportEmbed] });
+        }
+
+        if (cmd === "ban") {
+          const targetUser = message.mentions.users.first();
+          const reason = args.slice(2).join(" ") || "No reason provided";
+          if (!targetUser) return message.reply("Usage: .ban <@user> [reason]");
+          
+          const member = await message.guild?.members.fetch(targetUser.id);
+          if (member) {
+            await member.ban({ reason });
+            return message.reply(`🔨 **${targetUser.username}** has been banned.`);
+          }
+          return message.reply("Could not find user in guild.");
+        }
+
         if (cmd === "lock") {
           await applyLock(message.channel as TextChannel, config.targetUserId, 'mod');
           return;
