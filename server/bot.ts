@@ -1,5 +1,5 @@
 import { Client, GatewayIntentBits, TextChannel, PermissionsBitField, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from "discord.js";
-import { storage } from "./storage.js";
+import { storage } from "./storage";
 
 export const client = new Client({
   intents: [
