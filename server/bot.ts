@@ -20,10 +20,23 @@ interface ActiveLock {
 const activeLocks = new Map<string, ActiveLock>();
 const ASSET_IMAGE_URL = "https://raw.githubusercontent.com/replit/agent-assets/main/pickel.png";
 
+function parseTime(str: string): number | null {
+  const match = str.match(/^(\d+)([smhd])$/);
+  if (!match) return null;
+  const val = parseInt(match[1]);
+  const unit = match[2];
+  switch (unit) {
+    case 's': return val * 1000;
+    case 'm': return val * 1000 * 60;
+    case 'h': return val * 1000 * 60 * 60;
+    case 'd': return val * 1000 * 60 * 60 * 24;
+    default: return null;
+  }
+}
+
 export async function startBot() {
   if (!process.env.DISCORD_TOKEN) return;
 
-  // Auto-unlock and Reminder Timers
   setInterval(async () => {
     const now = new Date();
     const locks = Array.from(activeLocks.entries());
@@ -37,7 +50,6 @@ export async function startBot() {
         continue;
       }
 
-      // 6 Hour Shiny Reminder
       if (lock.isShinyHunt && diffHrs >= 6 && !lock.reminderSent) {
         lock.reminderSent = true;
         if (lock.hunterId) {
@@ -45,7 +57,6 @@ export async function startBot() {
         }
       }
 
-      // 12 Hour Auto-Unlock
       if (diffHrs >= 12) {
         try {
           const config = await storage.getConfig();
@@ -56,6 +67,8 @@ export async function startBot() {
               AddReactions: true,
               UseExternalEmojis: true,
               ReadMessageHistory: true,
+              EmbedLinks: true,
+              AttachFiles: true,
             }, { reason: "Auto-unlock after 12h", type: 1 });
             activeLocks.delete(channelId);
             await channel.send("🔓 **Auto-unlock:** This channel has been automatically unlocked after 12 hours.").catch(console.error);
@@ -66,7 +79,7 @@ export async function startBot() {
         }
       }
     }
-  }, 1000 * 60 * 5); // Check every 5 minutes
+  }, 1000 * 60 * 5);
 
   client.on("ready", () => {
     storage.addLog({ type: "INFO", message: `Bot online as ${client.user?.tag}`, channelName: "System" });
@@ -85,7 +98,6 @@ export async function startBot() {
     const config = await storage.getConfig();
     if (!config || !config.isSystemEnabled) return;
 
-    // Command handling
     if (message.content.startsWith(".")) {
       const args = message.content.slice(1).trim().split(/\s+/);
       const cmd = args[0].toLowerCase();
@@ -93,6 +105,22 @@ export async function startBot() {
 
       if (cmd === "unlock" || cmd === "ul") {
         await handleUnlock(message);
+        return;
+      }
+
+      if (cmd === "remind") {
+        const timeStr = args[1];
+        const reason = args.slice(2).join(" ") || "No reason provided";
+        if (!timeStr) return message.reply("Usage: .remind <time> [reason] (e.g. .remind 10m pickel)");
+        
+        const ms = parseTime(timeStr);
+        if (!ms) return message.reply("Invalid time format! Use s, m, h, or d (e.g. 10m).");
+
+        await message.reply(`✅ I'll remind you in **${timeStr}** for: *${reason}*`);
+        
+        setTimeout(async () => {
+          await message.channel.send(`🔔 <@${message.author.id}>, reminder ${timeStr} ago: **${reason}**`).catch(console.error);
+        }, ms);
         return;
       }
 
@@ -107,7 +135,6 @@ export async function startBot() {
       }
     }
 
-    // Spawn Detection
     if (message.author.id !== config.sourceBotId) return;
 
     const isShinyHunt = message.content.includes("Shiny hunt pings:");
@@ -115,10 +142,11 @@ export async function startBot() {
     const isRegionalSpawn = config.regionalRoleId ? message.mentions.roles.has(config.regionalRoleId) : false;
 
     if (isShinyHunt || isRareSpawn || isRegionalSpawn) {
+      if (activeLocks.has(message.channel.id)) return;
+
       let hunterId: string | undefined;
       let lockType: 'shiny' | 'rare' | 'regional';
 
-      // Prioritize shiny hunt, then regional, then rare to prevent double embeds
       if (isShinyHunt) {
         lockType = 'shiny';
         const lines = message.content.split("\n");
@@ -139,6 +167,8 @@ export async function startBot() {
 
   async function applyLock(channel: TextChannel, targetUserId: string, type: 'shiny' | 'rare' | 'regional' | 'mod', hunterId?: string) {
     try {
+      if (activeLocks.has(channel.id)) return;
+
       await channel.permissionOverwrites.edit(targetUserId, {
         ViewChannel: false,
         SendMessages: false,
@@ -155,9 +185,11 @@ export async function startBot() {
       let title = "🔒 Channel Locked";
       let description = "This channel has been locked.";
       let color = 0xFF0000;
+      let emoji = "🔒";
 
       if (type === 'shiny') {
         title = "✨ Shiny Hunt Locked";
+        emoji = "✨";
         description = `Only <@${hunterId}> or Admins can unlock.\n\n**How to unlock:**\nClick the button below or use \`.ul\``;
         color = 0xFFA500;
       } else if (type === 'rare') {
@@ -165,22 +197,26 @@ export async function startBot() {
         description = "Anyone can unlock this channel.\n\n**How to unlock:**\nClick the button below or use \`.ul\`";
       } else if (type === 'regional') {
         title = "🌏 Regional Spawn Locked";
+        emoji = "🌏";
         description = "Anyone can unlock this channel.\n\n**How to unlock:**\nClick the button below or use \`.ul\`";
       } else if (type === 'mod') {
         title = "👮 Moderation Lock";
+        emoji = "👮";
         description = "This channel was locked by a moderator.";
       }
 
       const embed = new EmbedBuilder()
-        .setTitle(title)
-        .setDescription(description)
-        .setImage(ASSET_IMAGE_URL + "?t=" + Date.now())
+        .setAuthor({ name: "ShinyHunt Manager", iconURL: ASSET_IMAGE_URL })
+        .setTitle(`${emoji} ${title}`)
+        .setDescription(`>>> ${description}`)
+        .setImage(ASSET_IMAGE_URL)
         .setThumbnail(ASSET_IMAGE_URL)
         .setColor(color)
-        .setFooter({ text: "ShinyHunt Manager • Pickel", iconURL: ASSET_IMAGE_URL });
+        .setTimestamp()
+        .setFooter({ text: "Pickel • Stay Rare", iconURL: ASSET_IMAGE_URL });
 
       const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-        new ButtonBuilder().setCustomId("unlock_button").setLabel("Unlock Channel").setStyle(ButtonStyle.Success)
+        new ButtonBuilder().setCustomId("unlock_button").setLabel("Unlock Channel").setStyle(ButtonStyle.Success).setEmoji("🔓")
       );
 
       await channel.send({ embeds: [embed], components: [row] });
@@ -192,6 +228,11 @@ export async function startBot() {
 
   async function handleUnlock(source: any) {
     const channel = source.channel as TextChannel;
+    if (!activeLocks.has(channel.id)) {
+      if (source.reply) return source.reply({ content: "❌ Channel is already unlocked.", ephemeral: true });
+      return;
+    }
+
     const user = source.user || source.author;
     const config = await storage.getConfig();
     if (!config) return;
@@ -222,17 +263,24 @@ export async function startBot() {
         EmbedLinks: true,
         AttachFiles: true,
       }, { reason: "Bot Unlock", type: 1 });
+      
       activeLocks.delete(channel.id);
       
-      const msg = "🔓 Channel Unlocked. Permissions restored.";
+      const embed = new EmbedBuilder()
+        .setTitle("🔓 Channel Unlocked")
+        .setDescription(`Permissions have been restored by **${user.tag}**.`)
+        .setColor(0x00FF00)
+        .setTimestamp()
+        .setFooter({ text: "Pickel Manager", iconURL: ASSET_IMAGE_URL });
+
       if (source.reply) {
         if (source.deferred || source.replied) {
-          await source.followUp({ content: msg });
+          await source.followUp({ embeds: [embed] });
         } else {
-          await source.reply({ content: msg });
+          await source.reply({ embeds: [embed] });
         }
       } else {
-        await channel.send(msg);
+        await channel.send({ embeds: [embed] });
       }
 
       await storage.addLog({ type: "UNLOCK", message: `Unlocked by ${user.tag}`, channelName: channel.name });
@@ -244,14 +292,3 @@ export async function startBot() {
 
   client.login(process.env.DISCORD_TOKEN).catch(console.error);
 }
-async function main() {
-  if (!process.env.DISCORD_TOKEN) {
-    console.error("❌ DISCORD_TOKEN is not set");
-    process.exit(1);
-  }
-
-  await client.login(process.env.DISCORD_TOKEN);
-  await startBot();
-}
-
-main().catch(console.error);
