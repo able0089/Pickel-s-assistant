@@ -131,6 +131,7 @@ export async function startBot() {
             { name: "🛠️ Management", value: "`.ul` / `.unlock` - Unlock channel\n`.lock` - Mod lock\n`.purge <n>` - Delete messages" },
             { name: "🛡️ Moderation", value: "`.warn <@user> [reason]` - Warn user (2=mute, 5=ban)\n`.ban <@user> [reason]` - Ban user\n`.reports` - View reports" },
             { name: "⏰ Utilities", value: "`.remind <time> <reason>` - Set reminder\n`.afk [reason]` - Set AFK status\n`.report <@user> <reason>` - Report user\n`.ping` - Latency\n`.avatar [@user]` - Show avatar" },
+            { name: "🎮 Fun", value: "`.roll [max]` - Roll a number\n`.coinflip` - Flip a coin\n`.rps [choice]` - Rock Paper Scissors" },
             { name: "✨ Automation", value: "I automatically lock channels for **Rare**, **Regional**, and **Shiny** spawns." }
           )
           .setThumbnail(ASSET_IMAGE_URL)
@@ -187,6 +188,35 @@ export async function startBot() {
           await message.channel.send(`🔔 <@${message.author.id}>, reminder ${timeStr} ago: **${reason}**`).catch(console.error);
         }, ms);
         return;
+      }
+
+      if (cmd === "roll") {
+        const max = parseInt(args[1]) || 100;
+        const result = Math.floor(Math.random() * max) + 1;
+        return message.reply(`🎲 You rolled a **${result}** (1-${max})`);
+      }
+
+      if (cmd === "coinflip") {
+        const result = Math.random() > 0.5 ? "Heads" : "Tails";
+        return message.reply(`🪙 It's **${result}**!`);
+      }
+
+      if (cmd === "rps") {
+        const choices = ["rock", "paper", "scissors"];
+        const userChoice = args[1]?.toLowerCase();
+        if (!choices.includes(userChoice)) return message.reply("Usage: .rps [rock/paper/scissors]");
+        
+        const botChoice = choices[Math.floor(Math.random() * choices.length)];
+        let result = "";
+        if (userChoice === botChoice) result = "It's a tie!";
+        else if (
+          (userChoice === "rock" && botChoice === "scissors") ||
+          (userChoice === "paper" && botChoice === "rock") ||
+          (userChoice === "scissors" && botChoice === "paper")
+        ) result = "You win!";
+        else result = "I win!";
+        
+        return message.reply(`${userChoice} vs ${botChoice}... **${result}**`);
       }
 
       if (isAdmin) {
