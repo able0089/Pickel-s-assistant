@@ -21,6 +21,8 @@ const activeLocks = new Map<string, ActiveLock>();
 const afkUsers = new Map<string, { reason: string, timestamp: Date }>();
 const ASSET_IMAGE_URL = "https://raw.githubusercontent.com/replit/agent-assets/main/pickel.png";
 const OWNER_ID = "1396815034247806999";
+const TOKEN = process.env.DISCORD_TOKEN;
+const DATABASE_URL = process.env.DATABASE_URL;
 
 function parseTime(str: string): number | null {
   const match = str.match(/^(\d+)([smhd])$/);
@@ -37,7 +39,13 @@ function parseTime(str: string): number | null {
 }
 
 export async function startBot() {
-  if (!process.env.DISCORD_TOKEN) return;
+  if (!TOKEN) {
+    console.warn("DISCORD_TOKEN not found. Bot will not start.");
+    return;
+  }
+  if (!DATABASE_URL) {
+    console.warn("DATABASE_URL not found. Database operations will fail.");
+  }
 
   setInterval(async () => {
     const now = new Date();
@@ -295,7 +303,10 @@ export async function startBot() {
     const isRegionalSpawn = config.regionalRoleId ? message.mentions.roles.has(config.regionalRoleId) : false;
 
     if (isShinyHunt || isRareSpawn || isRegionalSpawn) {
-      if (activeLocks.has(message.channel.id)) return;
+      if (activeLocks.has(message.channel.id)) {
+        const currentLock = activeLocks.get(message.channel.id);
+        if (currentLock?.isShinyHunt && !isShinyHunt) return;
+      }
 
       let hunterId: string | undefined;
       let lockType: 'shiny' | 'rare' | 'regional';
@@ -443,5 +454,5 @@ export async function startBot() {
     }
   }
 
-  client.login(process.env.DISCORD_TOKEN).catch(console.error);
+  client.login(TOKEN).catch(console.error);
 }
