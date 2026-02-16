@@ -303,11 +303,6 @@ export async function startBot() {
     const isRegionalSpawn = config.regionalRoleId ? message.mentions.roles.has(config.regionalRoleId) : false;
 
     if (isShinyHunt || isRareSpawn || isRegionalSpawn) {
-      if (activeLocks.has(message.channel.id)) {
-        const currentLock = activeLocks.get(message.channel.id);
-        if (currentLock?.isShinyHunt && !isShinyHunt) return;
-      }
-
       let hunterId: string | undefined;
       let lockType: 'shiny' | 'rare' | 'regional';
 
