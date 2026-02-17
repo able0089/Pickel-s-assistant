@@ -21,8 +21,6 @@ const activeLocks = new Map<string, ActiveLock>();
 const afkUsers = new Map<string, { reason: string, timestamp: Date }>();
 const ASSET_IMAGE_URL = "https://raw.githubusercontent.com/replit/agent-assets/main/pickel.png";
 const OWNER_ID = "1396815034247806999";
-const TOKEN = process.env.DISCORD_TOKEN;
-const DATABASE_URL = process.env.DATABASE_URL;
 
 function parseTime(str: string): number | null {
   const match = str.match(/^(\d+)([smhd])$/);
@@ -39,13 +37,7 @@ function parseTime(str: string): number | null {
 }
 
 export async function startBot() {
-  if (!TOKEN) {
-    console.warn("DISCORD_TOKEN not found. Bot will not start.");
-    return;
-  }
-  if (!DATABASE_URL) {
-    console.warn("DATABASE_URL not found. Database operations will fail.");
-  }
+  if (!process.env.DISCORD_TOKEN) return;
 
   setInterval(async () => {
     const now = new Date();
@@ -139,7 +131,6 @@ export async function startBot() {
             { name: "🛠️ Management", value: "`.ul` / `.unlock` - Unlock channel\n`.lock` - Mod lock\n`.purge <n>` - Delete messages" },
             { name: "🛡️ Moderation", value: "`.warn <@user> [reason]` - Warn user (2=mute, 5=ban)\n`.ban <@user> [reason]` - Ban user\n`.reports` - View reports" },
             { name: "⏰ Utilities", value: "`.remind <time> <reason>` - Set reminder\n`.afk [reason]` - Set AFK status\n`.report <@user> <reason>` - Report user\n`.ping` - Latency\n`.avatar [@user]` - Show avatar" },
-            { name: "🎮 Fun", value: "`.roll [max]` - Roll a number\n`.coinflip` - Flip a coin\n`.rps [choice]` - Rock Paper Scissors" },
             { name: "✨ Automation", value: "I automatically lock channels for **Rare**, **Regional**, and **Shiny** spawns." }
           )
           .setThumbnail(ASSET_IMAGE_URL)
@@ -196,35 +187,6 @@ export async function startBot() {
           await message.channel.send(`🔔 <@${message.author.id}>, reminder ${timeStr} ago: **${reason}**`).catch(console.error);
         }, ms);
         return;
-      }
-
-      if (cmd === "roll") {
-        const max = parseInt(args[1]) || 100;
-        const result = Math.floor(Math.random() * max) + 1;
-        return message.reply(`🎲 You rolled a **${result}** (1-${max})`);
-      }
-
-      if (cmd === "coinflip") {
-        const result = Math.random() > 0.5 ? "Heads" : "Tails";
-        return message.reply(`🪙 It's **${result}**!`);
-      }
-
-      if (cmd === "rps") {
-        const choices = ["rock", "paper", "scissors"];
-        const userChoice = args[1]?.toLowerCase();
-        if (!choices.includes(userChoice)) return message.reply("Usage: .rps [rock/paper/scissors]");
-        
-        const botChoice = choices[Math.floor(Math.random() * choices.length)];
-        let result = "";
-        if (userChoice === botChoice) result = "It's a tie!";
-        else if (
-          (userChoice === "rock" && botChoice === "scissors") ||
-          (userChoice === "paper" && botChoice === "rock") ||
-          (userChoice === "scissors" && botChoice === "paper")
-        ) result = "You win!";
-        else result = "I win!";
-        
-        return message.reply(`${userChoice} vs ${botChoice}... **${result}**`);
       }
 
       if (isAdmin) {
@@ -303,6 +265,8 @@ export async function startBot() {
     const isRegionalSpawn = config.regionalRoleId ? message.mentions.roles.has(config.regionalRoleId) : false;
 
     if (isShinyHunt || isRareSpawn || isRegionalSpawn) {
+      if (activeLocks.has(message.channel.id)) return;
+
       let hunterId: string | undefined;
       let lockType: 'shiny' | 'rare' | 'regional';
 
@@ -449,5 +413,5 @@ export async function startBot() {
     }
   }
 
-  client.login(TOKEN).catch(console.error);
+  client.login(process.env.DISCORD_TOKEN).catch(console.error);
 }
